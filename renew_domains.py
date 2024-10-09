@@ -2,45 +2,44 @@ import datetime
 import dns.resolver
 import subprocess
 from ldap3 import Server, Connection, ALL, NTLM
-import ssl
-import datetime
+import ssl, socket
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from datetime import datetime
 from ldap3 import Server, Connection, ALL, NTLM
 
 
-def get_expiration_date(cert_file):
+def get_expiration_date(domain):
     try:
-        # Load the certificate
-        with open(cert_file, 'rb') as f:
-            cert_data = f.read()
+        context = ssl.create_default_context()
+        hostname = "mail." + domain
+        with socket.create_connection((hostname, 465)) as sock:
+            # Wrap the socket with SSL
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                # Get the certificate
+                cert = ssock.getpeercert()
+                # Extract the expiration date
+                expiration_date = cert['notAfter']
+                # Convert to a datetime object
+                expiration_datetime = datetime.strptime(expiration_date, '%b %d %H:%M:%S %Y GMT')
+                print(expiration_datetime)
 
-        # Parse the certificate
-        cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+        current_date = datetime.utcnow()
 
-        # Extract the expiration date (UTC)
-        expiration_date = cert.not_valid_after_utc
 
-        # Get current date and time (UTC, naive)
-        current_date = datetime.utcnow()  # This is naive, but we can handle it
-
-        # Make current date aware by adding UTC offset
-        current_date = current_date.replace(tzinfo=expiration_date.tzinfo)
-
-        # Check if the certificate is expired
-        if expiration_date < current_date:
-            print(f"The SSL certificate from {cert_file} has expired on {expiration_date}.")
+        if current_date > expiration_datetime:
+            print(f"The SSL certificate from {domain} has expired on {expiration_date}.")
         else:
-            print(f"The SSL certificate from {cert_file} is valid until {expiration_date}.")
-        return expiration_date
+            print(f"The SSL certificate from {domain} is valid until {expiration_date}.")
+        return expiration_datetime
+
     except Exception as e:
-        print(f"Error checking SSL certificate from {cert_file}: {e}")
+        print(f"Error checking SSL certificate from {domain}: {e}")
 
 
 def is_domain_expiring_soon(expiration_date):
     """Check if the domain is expiring within 2 weeks."""
-    today = datetime.datetime.now()
+    today = datetime.now()
     return (expiration_date - today).days <= 14
 
 
@@ -99,37 +98,44 @@ def query_ldap_domains(ldap_server_url, base_dn, username, password):
     return domains
 
 def main():
+    # start things off by getting the list of domains on the mail server by querying the LDAP server for the list
     ldap_server_url = "10.0.5.130"
     base_dn = "o=domains,dc=emypeople,dc=net"
     username = "cn=vmail,dc=emypeople,dc=net"
     password = "bMppDN7fZSp2YyhSBJNXDJLzj1E0IseB"
-
     domain_list = query_ldap_domains(ldap_server_url, base_dn, username, password)
+    # print the list of domains
     print("Domains found:", domain_list)
 
-    """Main method to check domains and renew certificates."""
-
+    # next, we check the MX record for each domain, and build out a list of the domains that use the upward mail server
+    # as their mail exchanger
     valid_mx_domains = check_mx_record(domain_list)
 
+    # start an empty list for domains that need renewed
     to_renew = []
-
-    # Iterate through each domain to check expiration
+    # iterate through each domain to check expiration and determine if they need renewed
     for domain in valid_mx_domains:
-        expiration_date = get_expiration_date(f"domains/{domain}/cert3.pem")
+        expiration_date = get_expiration_date(domain)
         print(expiration_date)
-        # Check if the domain is expiring soon
-        if is_domain_expiring_soon(expiration_date):
-            to_renew.append(domain)
-    print(to_renew)
-    # Check MX records for the domains that are expiring soon
+        if expiration_date:
+            # check if the domain is expiring soon
+            if is_domain_expiring_soon(expiration_date):
+                print("domain needs renewed")
+                to_renew.append(domain)
+            else:
+                print("domain is good for now")
+        else:
+            print("Domain did not respond when queried using SMTP secure.")
+    if len(to_renew) > 0:
+        # print the list of domains that need renewed
+        print(to_renew)
+        # Renew certificates for domains that meet both criteria
+        # for domain in mx_check_list:
+        #     renew_certificate(domain)
 
-
-    # Renew certificates for domains that meet both criteria
-    # for domain in mx_check_list:
-    #     renew_certificate(domain)
-
+    else:
+        print("No Domains Need Renewed")
     print("Script execution completed.")
-
 
 # Define your domains
 if __name__ == "__main__":
