@@ -7,6 +7,8 @@ import datetime
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from datetime import datetime
+from ldap3 import Server, Connection, ALL, NTLM
+
 
 def get_expiration_date(cert_file):
     try:
@@ -66,10 +68,6 @@ def renew_certificate(domain):
         return domain
     except subprocess.CalledProcessError as e:
         print(f"Failed to renew certificate for {domain}: {e}")
-
-
-
-from ldap3 import Server, Connection, ALL, NTLM
 
 
 def query_ldap_domains(ldap_server_url, base_dn, username, password):
