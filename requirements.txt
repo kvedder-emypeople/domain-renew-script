@@ -1,3 +1,4 @@
 certbot
 pyopenssl
 ldap3
+dnspython
