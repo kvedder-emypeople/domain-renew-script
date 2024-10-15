@@ -121,7 +121,7 @@ def main():
         print(date)
     elif args.dns:
         domains = []
-        domains.append(args.records)
+        domains.append(args.dns)
         check_mx_record(domains)
     elif args.renew:
         domains = []
