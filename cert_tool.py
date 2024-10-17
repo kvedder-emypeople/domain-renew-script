@@ -12,6 +12,7 @@ from ldap3 import Server, Connection, ALL, NTLM
 def get_expiration_date(domain):
     try:
         context = ssl.create_default_context()
+        # hostname = "mail." + domain
         hostname = "mail." + domain
         with socket.create_connection((hostname, 465)) as sock:
             # Wrap the socket with SSL
@@ -96,8 +97,9 @@ def renew_certificate(domain):
     print(f"Renewing certificate for {domain}...")
     try:
         # Command to renew certificates
-        subprocess.run(['certbot', '--dry-run', '-qn', 'certonly','--cert-name', domain, '--webroot', '-w', '/var/www/html', '-d', domain], check=True)
-        subprocess.run(['chmod', '+r', '/etc/letsencrypt/live/$i/privkey.pem'], check=True)
+        # certbot --dry-run -qn certonly --cert-name <domain> --webroot /var/www/html -d domain
+        subprocess.run(['certbot', '--dry-run', '-n', 'certonly','--cert-name', domain, '--webroot', '-w', '/var/www/html', '-d', domain], check=True)
+        subprocess.run(['chmod', '+r', f'/etc/letsencrypt/live/{domain}/privkey.pem'], check=True)
         print(f"Successfully renewed certificate for {domain}.")
         return domain
     except subprocess.CalledProcessError as e:
